@@ -1,6 +1,6 @@
 @echo off
 echo ========================================================
-echo 🪑 Building Furniture Detection App (Dual Model)
+echo 🪑 Building Furniture Detection App (Dual Model + Performance Analysis)
 echo ========================================================
 echo.
 
@@ -46,6 +46,31 @@ if %MODEL_COUNT%==0 (
     echo.
 )
 
+REM Check for training results folders
+echo 📊 Checking for training results folders...
+set "RESULTS_COUNT=0"
+if exist "yolo8s_training2" (
+    echo ✅ YOLOv8s results found: yolo8s_training2\
+    set /a RESULTS_COUNT+=1
+)
+if exist "yolo11s_training2" (
+    echo ✅ YOLOv11s results found: yolo11s_training2\
+    set /a RESULTS_COUNT+=1
+)
+if exist "roboflow3.0_training2" (
+    echo ✅ Roboflow results found: roboflow3.0_training2\
+    set /a RESULTS_COUNT+=1
+)
+
+if %RESULTS_COUNT%==0 (
+    echo ⚠️  No training results folders found!
+    echo    Performance analysis will show placeholder data
+    echo.
+) else (
+    echo ✅ Found %RESULTS_COUNT% training results folder(s)
+    echo.
+)
+
 if not "%MISSING_FILES%"=="" (
     echo.
     echo ❌ Missing required files: %MISSING_FILES%
@@ -84,7 +109,21 @@ if exist "best.pt" (
     echo ➕ Including backup model
 )
 
-REM Add hidden imports
+REM Add training results folders if they exist
+if exist "yolo8s_training2" (
+    set "BUILD_CMD=%BUILD_CMD% --add-data "yolo8s_training2;yolo8s_training2""
+    echo ➕ Including YOLOv8s training results
+)
+if exist "yolo11s_training2" (
+    set "BUILD_CMD=%BUILD_CMD% --add-data "yolo11s_training2;yolo11s_training2""
+    echo ➕ Including YOLOv11s training results
+)
+if exist "roboflow3.0_training2" (
+    set "BUILD_CMD=%BUILD_CMD% --add-data "roboflow3.0_training2;roboflow3.0_training2""
+    echo ➕ Including Roboflow training results
+)
+
+REM Add hidden imports (including new ones for performance analysis)
 set "BUILD_CMD=%BUILD_CMD% --hidden-import streamlit"
 set "BUILD_CMD=%BUILD_CMD% --hidden-import streamlit.web.cli"
 set "BUILD_CMD=%BUILD_CMD% --hidden-import streamlit.runtime.scriptrunner.magic_funcs"
@@ -96,6 +135,9 @@ set "BUILD_CMD=%BUILD_CMD% --hidden-import PIL"
 set "BUILD_CMD=%BUILD_CMD% --hidden-import numpy"
 set "BUILD_CMD=%BUILD_CMD% --hidden-import pandas"
 set "BUILD_CMD=%BUILD_CMD% --hidden-import matplotlib"
+set "BUILD_CMD=%BUILD_CMD% --hidden-import matplotlib.pyplot"
+set "BUILD_CMD=%BUILD_CMD% --hidden-import matplotlib.image"
+set "BUILD_CMD=%BUILD_CMD% --hidden-import pathlib"
 set "BUILD_CMD=%BUILD_CMD% --hidden-import yaml"
 set "BUILD_CMD=%BUILD_CMD% --hidden-import tempfile"
 set "BUILD_CMD=%BUILD_CMD% --hidden-import datetime"
@@ -105,9 +147,10 @@ set "BUILD_CMD=%BUILD_CMD% --hidden-import zipfile"
 set "BUILD_CMD=%BUILD_CMD% --hidden-import threading"
 set "BUILD_CMD=%BUILD_CMD% --hidden-import subprocess"
 set "BUILD_CMD=%BUILD_CMD% --hidden-import webbrowser"
+set "BUILD_CMD=%BUILD_CMD% --hidden-import glob"
 
 REM Set output name and icon
-set "BUILD_CMD=%BUILD_CMD% --name "FurnitureDetectionApp_DualModel""
+set "BUILD_CMD=%BUILD_CMD% --name "FurnitureDetectionApp_DualModel_v2""
 
 REM Add icon if it exists
 if exist "app_icon.ico" (
@@ -134,10 +177,10 @@ if %ERRORLEVEL%==0 (
     echo ========================================================
     echo.
     echo 📁 Your executable is ready:
-    echo    📍 Location: dist\FurnitureDetectionApp_DualModel.exe
+    echo    📍 Location: dist\FurnitureDetectionApp_DualModel_v2.exe
     echo    💾 Size: 
-    if exist "dist\FurnitureDetectionApp_DualModel.exe" (
-        for %%A in ("dist\FurnitureDetectionApp_DualModel.exe") do echo       %%~zA bytes
+    if exist "dist\FurnitureDetectionApp_DualModel_v2.exe" (
+        for %%A in ("dist\FurnitureDetectionApp_DualModel_v2.exe") do echo       %%~zA bytes
     )
     echo.
     echo 🎯 Features included:
@@ -146,9 +189,12 @@ if %ERRORLEVEL%==0 (
     echo    • Image, video, and webcam detection
     echo    • Batch processing
     echo    • Export functionality
+    echo    • 📊 Performance analysis page
+    echo    • Training results visualization
     echo.
     echo 🚀 To test: Double-click the .exe file
     echo    The app will open in your browser automatically
+    echo    Navigate using the sidebar to access performance analysis
     echo.
     
     REM Offer to open the dist folder
@@ -173,6 +219,7 @@ if %ERRORLEVEL%==0 (
     echo    pip install --upgrade pip
     echo    pip install --upgrade pyinstaller
     echo    pip install --upgrade ultralytics
+    echo    pip install --upgrade matplotlib
     echo.
 )
 
