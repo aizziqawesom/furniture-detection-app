@@ -11,6 +11,10 @@ from datetime import datetime
 import json
 import zipfile
 import io
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+from pathlib import Path
+import glob
 
 # Page configuration
 st.set_page_config(
@@ -96,9 +100,224 @@ MODEL_CONFIGS = {
         "description": "YOLOv11s - Latest model with improved accuracy",
         "color": "#2196F3",
         "icon": "🔵"
+    },
+        "Roboflow": {
+        "name": "Roboflow 3.0",
+        "path": "roboflow_best.pt",
+        "description": "Roboflow 3.0 - Enhanced training pipeline",
+        "color": "#FF5722",
+        "icon": "🔴",
+        "results_folder": "roboflow3.0_training2"
     }
 }
+def parse_results_metrics(results_folder):
+    """Parse metrics from results.png or results2.png"""
+    results_path = Path(results_folder)
+    
+    # Try to find results images
+    results_files = list(results_path.glob("results*.png"))
+    
+    if not results_files:
+        return None
+    
+    # For now, return placeholder values - you can implement OCR or manual input later
+    # These would typically be extracted from the metrics display in the results image
+    return {
+        "mAP50": 0.0,  # You'll need to manually input these or implement OCR
+        "mAP50-95": 0.0,
+        "Precision": 0.0,
+        "Recall": 0.0,
+        "results_image": str(results_files[0])
+    }
 
+def get_model_performance_data():
+    """Get performance data for all models"""
+    performance_data = {}
+    
+    # Manual performance data - replace with actual values from your training results
+    performance_data = {
+        "YOLOv8s": {
+            "mAP50": 83.6,
+            "mAP50-95": 69.7,
+            "Precision": 82.9,
+            "Recall": 79.3,
+            "results_folder": "yolo8s_training2"
+        },
+        "YOLOv11s": {
+            "mAP50": 82.9,
+            "mAP50-95": 70.3,
+            "Precision": 82.1,
+            "Recall": 81.6,
+            "results_folder": "yolo11s_training2"
+        },
+        "Roboflow": {
+            "mAP50": 84.2,
+            "mAP50-95": 61.9,
+            "Precision": 82.4,
+            "Recall": 79.9,
+            "results_folder": "roboflow3.0_training2"
+        }
+    }
+    
+    return performance_data
+
+def display_model_performance():
+    """Display model performance comparison page"""
+    st.markdown('<h1 class="main-header">📊 Model Performance Analysis</h1>', unsafe_allow_html=True)
+    st.markdown("**Comprehensive comparison of YOLOv8s, YOLOv11s, and Roboflow 3.0 training results**")
+    
+    # Get performance data
+    performance_data = get_model_performance_data()
+    
+    # Summary metrics at the top
+    st.markdown('<h2 class="sub-header">🎯 Performance Summary</h2>', unsafe_allow_html=True)
+    
+    # Create summary table
+    summary_df = pd.DataFrame({
+        'Model': list(performance_data.keys()),
+        'mAP@0.5': [f"{data['mAP50']:.1f}%" for data in performance_data.values()],
+        'mAP@0.5:0.95': [f"{data['mAP50-95']:.1f}%" for data in performance_data.values()],
+        'Precision': [f"{data['Precision']:.1f}%" for data in performance_data.values()],
+        'Recall': [f"{data['Recall']:.1f}%" for data in performance_data.values()]
+    })
+    
+    # Display summary table with styling
+    st.markdown("""
+    <style>
+    .performance-table {
+        background: linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%);
+        padding: 1rem;
+        border-radius: 10px;
+        margin: 1rem 0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    with st.container():
+        st.markdown('<div class="performance-table">', unsafe_allow_html=True)
+        st.dataframe(
+            summary_df,
+            use_container_width=True,
+            hide_index=True
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Best performing model highlight
+    best_map50 = max(performance_data.values(), key=lambda x: x['mAP50'])
+    best_model = [k for k, v in performance_data.items() if v['mAP50'] == best_map50['mAP50']][0]
+    
+    st.success(f"🏆 **Best Overall Performance**: {best_model} with mAP@0.5 of {best_map50['mAP50']:.1f}%")
+    
+    # Detailed results for each model
+    st.markdown('<h2 class="sub-header">📈 Detailed Training Results</h2>', unsafe_allow_html=True)
+    
+    # Create tabs for each model
+    tab1, tab2, tab3 = st.tabs(["🟢 YOLOv8s", "🔵 YOLOv11s", "🔴 Roboflow 3.0"])
+    
+    with tab1:
+        display_model_details("YOLOv8s", performance_data["YOLOv8s"])
+    
+    with tab2:
+        display_model_details("YOLOv11s", performance_data["YOLOv11s"])
+    
+    with tab3:
+        display_model_details("Roboflow", performance_data["Roboflow"])
+
+def display_model_details(model_name, data):
+    """Display detailed results for a specific model"""
+    results_folder = data['results_folder']
+    
+    # Model info header
+    st.markdown(f"### {MODEL_CONFIGS[model_name]['icon']} {model_name} Training Results")
+    
+    # Performance metrics cards
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            label="mAP@0.5", 
+            value=f"{data['mAP50']:.1f}%",
+            delta=f"{data['mAP50'] - 80:.1f}%" if data['mAP50'] > 80 else None
+        )
+    
+    with col2:
+        st.metric(
+            label="mAP@0.5:0.95", 
+            value=f"{data['mAP50-95']:.1f}%",
+            delta=f"{data['mAP50-95'] - 60:.1f}%" if data['mAP50-95'] > 60 else None
+        )
+    
+    with col3:
+        st.metric(
+            label="Precision", 
+            value=f"{data['Precision']:.1f}%",
+            delta=f"{data['Precision'] - 80:.1f}%" if data['Precision'] > 80 else None
+        )
+    
+    with col4:
+        st.metric(
+            label="Recall", 
+            value=f"{data['Recall']:.1f}%",
+            delta=f"{data['Recall'] - 75:.1f}%" if data['Recall'] > 75 else None
+        )
+    
+    # Display training results images
+    st.markdown("#### 📊 Training Curves and Metrics")
+    
+    # Check if results folder exists
+    results_path = Path(results_folder)
+    if results_path.exists():
+        # Display results.png or results2.png
+        results_files = list(results_path.glob("results*.png"))
+        if results_files:
+            st.image(str(results_files[0]), caption=f"{model_name} Training Results", use_column_width=True)
+        
+        # Display confusion matrix
+        confusion_files = list(results_path.glob("confusion_matrix*.png"))
+        if confusion_files:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.image(str(confusion_files[0]), caption="Confusion Matrix", use_column_width=True)
+            
+            # Display normalized confusion matrix if available
+            normalized_files = list(results_path.glob("*normalized*.png"))
+            if normalized_files:
+                with col2:
+                    st.image(str(normalized_files[0]), caption="Normalized Confusion Matrix", use_column_width=True)
+        
+        # Display curves (F1, P, R, PR)
+        st.markdown("#### 📈 Performance Curves")
+        curve_cols = st.columns(3)
+        
+        curve_files = {
+            "F1_curve.png": "F1 Score Curve",
+            "P_curve.png": "Precision Curve", 
+            "R_curve.png": "Recall Curve",
+            "PR_curve.png": "Precision-Recall Curve"
+        }
+        
+        curve_index = 0
+        for curve_file, caption in curve_files.items():
+            curve_path = results_path / curve_file
+            if curve_path.exists():
+                with curve_cols[curve_index % 3]:
+                    st.image(str(curve_path), caption=caption, use_column_width=True)
+                curve_index += 1
+        
+        # Display validation batch examples
+        st.markdown("#### 🖼️ Validation Examples")
+        val_batch_files = list(results_path.glob("val_batch*_labels.jpg"))
+        pred_batch_files = list(results_path.glob("val_batch*_pred*.jpg"))
+        
+        if val_batch_files and pred_batch_files:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.image(str(val_batch_files[0]), caption="Ground Truth Labels", use_column_width=True)
+            with col2:
+                st.image(str(pred_batch_files[0]), caption="Model Predictions", use_column_width=True)
+    
+    else:
+        st.warning(f"⚠️ Results folder '{results_folder}' not found. Please ensure training results are available.")
 @st.cache_resource
 def load_model(model_path, model_name):
     """Load YOLO model with caching"""
@@ -321,7 +540,17 @@ def main():
         "🔬 Model Comparison Mode",
         help="Run both models and compare results"
     )
+
+    st.sidebar.markdown("### 🧭 Navigation")
+    page = st.sidebar.selectbox(
+        "Choose Page",
+        ["🪑 Furniture Detection", "📊 Model Performance"],
+        index=0
+    )
     
+    if page == "📊 Model Performance":
+        display_model_performance()
+        return
     # Custom model paths
     with st.sidebar.expander("🛠️ Custom Model Paths"):
         yolov8_path = st.text_input(
@@ -354,7 +583,7 @@ def main():
                 else:
                     st.sidebar.error(f"❌ Failed to load {model_name}")
             else:
-                st.sidebar.warning(f"⚠️ {model_name} model not found: {config['path']}")
+                st.sidebar.warning(f"⚠️ {model_name} model not found: {config['path']} , roboflow API is not free and could not be deployed")
         
         if len(models) == 0:
             st.error("No models could be loaded. Please check model paths.")

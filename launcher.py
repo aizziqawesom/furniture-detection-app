@@ -64,6 +64,35 @@ def check_models():
     
     return True
 
+def check_results_folders():
+    """Check if training results folders exist"""
+    results_folders = [
+        "yolo8s_training2",
+        "yolo11s_training2", 
+        "roboflow3.0_training2"
+    ]
+    
+    print("📊 Checking for training results...")
+    
+    found_folders = []
+    for folder in results_folders:
+        folder_path = get_resource_path(folder)
+        if os.path.exists(folder_path):
+            print(f"   ✅ Found: {folder}")
+            found_folders.append(folder)
+        elif os.path.exists(folder):
+            print(f"   ✅ Found: {folder}")
+            found_folders.append(folder)
+        else:
+            print(f"   ❌ Missing: {folder}")
+    
+    if found_folders:
+        print(f"📈 Performance analysis available for {len(found_folders)} model(s)")
+    else:
+        print("⚠️  No training results found. Performance analysis will show placeholder data.")
+    
+    return found_folders
+
 def open_browser():
     """Open browser after delay"""
     time.sleep(4)  # Give Streamlit more time to start
@@ -77,7 +106,7 @@ def open_browser():
 def main():
     print("🪑 Furniture Detection App")
     print("=" * 50)
-    print("🚀 Starting Dual Model YOLO App...")
+    print("🚀 Starting Dual Model YOLO App with Performance Analysis...")
     print("⚡ Powered by YOLOv8s & YOLOv11s")
     print("=" * 50)
     
@@ -86,6 +115,9 @@ def main():
         print("\n❌ No models available. Cannot start app.")
         input("Press Enter to exit...")
         return
+    
+    # Check for training results
+    results_folders = check_results_folders()
     
     # Get the path to the Streamlit app
     app_path = get_resource_path('furniture_detection_app.py')
@@ -97,6 +129,8 @@ def main():
     
     print(f"\n📱 Starting Streamlit app...")
     print(f"🔗 App will open at: http://localhost:8501")
+    print(f"🪑 Furniture Detection: Available")
+    print(f"📊 Performance Analysis: {'Available' if results_folders else 'Limited (placeholder data)'}")
     print(f"⏹️  To stop: Press Ctrl+C in this window")
     
     # Start browser in separate thread
@@ -123,6 +157,7 @@ def main():
         print("1. Make sure you have an internet connection")
         print("2. Check if port 8501 is available")
         print("3. Try running as administrator")
+        print("4. Ensure training results folders are in the correct location")
         input("\nPress Enter to exit...")
 
 if __name__ == "__main__":
