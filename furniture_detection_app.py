@@ -66,6 +66,28 @@ st.markdown("""
         margin: 1rem 0;
         border: 1px solid #dee2e6;
     }
+    .sample-card {
+        border: 2px solid #e1e5e9;
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+        margin: 0.5rem;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    .sample-card:hover {
+        border-color: #1f77b4;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .sample-card.selected {
+        border-color: #1f77b4;
+        background-color: #f0f8ff;
+    }
+    .gallery-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 1rem;
+        margin: 1rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -101,7 +123,7 @@ MODEL_CONFIGS = {
         "color": "#2196F3",
         "icon": "🔵"
     },
-        "Roboflow": {
+    "Roboflow": {
         "name": "Roboflow 3.0",
         "path": "roboflow_best.pt",
         "description": "Roboflow 3.0 - Enhanced training pipeline",
@@ -110,6 +132,196 @@ MODEL_CONFIGS = {
         "results_folder": "roboflow3.0_training2"
     }
 }
+
+def get_sample_files():
+    """Get available sample images and videos from the repository"""
+    sample_dirs = ['examples', 'samples', 'test_data', 'demo_files']
+    image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']
+    video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.webm']
+    
+    samples = {
+        'images': [],
+        'videos': []
+    }
+    
+    # Debug: Show current working directory and existing files
+    current_dir = os.getcwd()
+    st.sidebar.info(f"📁 Current directory: {current_dir}")
+    
+    # Check multiple possible directories for samples
+    for sample_dir in sample_dirs:
+        dir_path = Path(sample_dir)
+        if dir_path.exists():
+            st.sidebar.success(f"✅ Found directory: {sample_dir}")
+            
+            # Get all files in the directory
+            files_found = list(dir_path.rglob('*'))
+            st.sidebar.info(f"📄 Files in {sample_dir}: {len(files_found)}")
+            
+            for file_path in files_found:
+                if file_path.is_file():
+                    file_ext = file_path.suffix.lower()
+                    relative_path = str(file_path)
+                    
+                    if file_ext in image_extensions:
+                        samples['images'].append({
+                            'name': file_path.name,
+                            'path': relative_path,
+                            'type': 'image',
+                            'size': file_path.stat().st_size
+                        })
+                        st.sidebar.success(f"🖼️ Found image: {file_path.name}")
+                    elif file_ext in video_extensions:
+                        samples['videos'].append({
+                            'name': file_path.name,
+                            'path': relative_path,
+                            'type': 'video',
+                            'size': file_path.stat().st_size
+                        })
+                        st.sidebar.success(f"🎥 Found video: {file_path.name}")
+        else:
+            st.sidebar.warning(f"❌ Directory not found: {sample_dir}")
+    
+    # Show what we found
+    st.sidebar.info(f"📊 Total images found: {len(samples['images'])}")
+    st.sidebar.info(f"📊 Total videos found: {len(samples['videos'])}")
+    
+    # If no samples found, offer helpful guidance
+    if not samples['images'] and not samples['videos']:
+        st.warning("⚠️ No sample files found. Please add your own sample images/videos!")
+        
+        # Suggest folder structure
+        st.info("""
+        📁 **Suggested folder structure:**
+        ```
+        examples/
+        ├── images/
+        │   ├── living_room.jpg
+        │   ├── bedroom.jpg
+        │   ├── kitchen.jpg
+        │   └── office.jpg
+        └── videos/
+            ├── room_tour.mp4
+            └── furniture_showcase.mp4
+        ```
+        
+        **Setup Options:**
+        1. Use the "📤 Upload Sample Files" section below to add images and videos
+        2. Or manually add your files to the `examples/images/` and `examples/videos/` folders
+        3. Restart the app to see your samples
+        """)
+    
+    return samples
+
+def display_sample_gallery(sample_type='images'):
+    """Display sample gallery for user selection"""
+    samples = get_sample_files()
+    
+    if not samples[sample_type]:
+        st.warning(f"No sample {sample_type} found in the repository.")
+        return None
+    
+    st.markdown(f"### 🖼️ Sample {sample_type.title()} Gallery")
+    st.markdown(f"*Select from {len(samples[sample_type])} available {sample_type}*")
+    
+    # Create columns for gallery display
+    cols_per_row = 4 if sample_type == 'images' else 3
+    
+    selected_sample = None
+    
+    # Display samples in a grid
+    for i in range(0, len(samples[sample_type]), cols_per_row):
+        cols = st.columns(cols_per_row)
+        
+        for j, col in enumerate(cols):
+            if i + j < len(samples[sample_type]):
+                sample = samples[sample_type][i + j]
+                
+                with col:
+                    # Create a unique key for each sample
+                    sample_key = f"{sample_type}_{i+j}_{sample['name']}"
+                    
+                    if sample_type == 'images':
+                        try:
+                            # Display thumbnail
+                            img = Image.open(sample['path'])
+                            # Resize for thumbnail
+                            img.thumbnail((200, 200))
+                            st.image(img, use_column_width=True)
+                        except Exception as e:
+                            st.error(f"Cannot load {sample['name']}")
+                            continue
+                    else:  # videos
+                        # For videos, show a placeholder or first frame
+                        st.markdown(f"🎥 **{sample['name']}**")
+                        st.markdown(f"Size: {sample['size'] / (1024*1024):.1f} MB")
+                    
+                    # Selection button
+                    if st.button(
+                        f"📂 Select {sample['name']}", 
+                        key=sample_key,
+                        help=f"Use {sample['name']} for detection"
+                    ):
+                        selected_sample = sample
+                    
+                    # Show file info
+                    st.caption(f"📄 {sample['name']}")
+                    if sample_type == 'images':
+                        st.caption(f"📊 {sample['size'] / 1024:.1f} KB")
+    
+    return selected_sample
+
+def create_sample_folders():
+    """Create sample folders and add some demo content suggestions"""
+    examples_dir = Path('examples')
+    images_dir = examples_dir / 'images'
+    videos_dir = examples_dir / 'videos'
+    
+    # Create directories if they don't exist
+    images_dir.mkdir(parents=True, exist_ok=True)
+    videos_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create a README file with instructions
+    readme_content = """# Sample Files for Furniture Detection
+
+## Folder Structure
+- `images/` - Place sample images here (jpg, png, bmp formats)
+- `videos/` - Place sample videos here (mp4, avi, mov formats)
+
+## Recommended Sample Content
+### Images:
+- Living room scenes with sofas, tables, lamps
+- Bedroom scenes with beds, wardrobes, chairs
+- Kitchen scenes with cabinets, dining tables
+- Office scenes with desks, chairs, monitors
+
+### Videos:
+- Room tours showing multiple furniture pieces
+- Furniture arrangement videos
+- Interior design showcases
+
+## File Naming Suggestions:
+- `living_room_01.jpg`
+- `bedroom_modern.jpg`
+- `kitchen_cabinet.jpg`
+- `office_setup.jpg`
+- `room_tour.mp4`
+- `furniture_showcase.mp4`
+
+The app will automatically detect and display these files in the Sample Gallery.
+"""
+    
+    readme_path = examples_dir / 'README.md'
+    if not readme_path.exists():
+        with open(readme_path, 'w') as f:
+            f.write(readme_content)
+    
+    return images_dir, videos_dir
+
+# [Previous functions remain the same: parse_results_metrics, get_model_performance_data, 
+# display_model_performance, display_model_details, load_model, get_model_info, 
+# draw_bounding_boxes, process_image, process_video, export_results, compare_models]
+
 def parse_results_metrics(results_folder):
     """Parse metrics from results.png or results2.png"""
     results_path = Path(results_folder)
@@ -318,6 +530,286 @@ def display_model_details(model_name, data):
     
     else:
         st.warning(f"⚠️ Results folder '{results_folder}' not found. Please ensure training results are available.")
+
+def display_about_page():
+    """Display comprehensive about page"""
+    st.markdown('<h1 class="main-header">ℹ️ About Furniture Detection App</h1>', unsafe_allow_html=True)
+    
+    # Introduction
+    st.markdown("""
+    <div class="model-info">
+        <h3>🪑 Welcome to the Dual YOLO Furniture Detection App!</h3>
+        <p>This advanced computer vision application uses state-of-the-art YOLO (You Only Look Once) models to detect and classify furniture items in images and videos with high accuracy and speed.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Key Features
+    st.markdown('<h2 class="sub-header">🚀 Key Features</h2>', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("""
+        **🤖 Multi-Model Support**
+        - YOLOv8s - Balanced speed and accuracy
+        - YOLOv11s - Latest model with improved performance
+        - Roboflow 3.0 - Enhanced training pipeline
+        
+        **📱 Multiple Detection Modes**
+        - 📸 Image Upload - Process single images
+        - 🎥 Video Upload - Process video files
+        - 📹 Live Webcam - Real-time detection
+        - 📂 Batch Processing - Multiple files at once
+        - 🖼️ Sample Gallery - Pre-loaded test samples
+        """)
+    
+    with col2:
+        st.markdown("""
+        **🔬 Advanced Analysis**
+        - Model comparison and benchmarking
+        - Performance metrics visualization
+        - Confidence threshold adjustment
+        - Class-specific filtering
+        
+        **💾 Export & Integration**
+        - JSON, CSV, Excel export formats
+        - Downloadable processed videos
+        - Detection statistics and reports
+        - Training results analysis
+        """)
+    
+    # Detectable Furniture Classes
+    st.markdown('<h2 class="sub-header">🏠 Detectable Furniture Classes</h2>', unsafe_allow_html=True)
+    st.markdown("The app can detect **20 different types of furniture** with high accuracy:")
+    
+    # Display furniture classes in a nice grid
+    furniture_cols = st.columns(4)
+    for i, furniture_class in enumerate(FURNITURE_CLASSES):
+        with furniture_cols[i % 4]:
+            st.markdown(f"• {furniture_class.title()}")
+    
+    # Technology Stack
+    st.markdown('<h2 class="sub-header">⚙️ Technology Stack</h2>', unsafe_allow_html=True)
+    
+    tech_col1, tech_col2, tech_col3 = st.columns(3)
+    
+    with tech_col1:
+        st.markdown("""
+        **🧠 AI/ML Frameworks**
+        - Ultralytics YOLO
+        - PyTorch
+        - OpenCV
+        - PIL (Python Imaging)
+        """)
+    
+    with tech_col2:
+        st.markdown("""
+        **🌐 Web & UI**
+        - Streamlit
+        - HTML/CSS
+        - Pandas
+        - Matplotlib
+        """)
+    
+    with tech_col3:
+        st.markdown("""
+        **📊 Data Processing**
+        - NumPy
+        - JSON/CSV/Excel export
+        - Video processing (FFmpeg)
+        - Real-time streaming
+        """)
+    
+    # Model Performance Summary
+    st.markdown('<h2 class="sub-header">📈 Model Performance Overview</h2>', unsafe_allow_html=True)
+    
+    performance_data = get_model_performance_data()
+    
+    perf_col1, perf_col2, perf_col3 = st.columns(3)
+    
+    with perf_col1:
+        st.markdown(f"""
+        <div class="model-comparison">
+            <h4>🟢 YOLOv8s</h4>
+            <p><strong>mAP@0.5:</strong> {performance_data['YOLOv8s']['mAP50']:.1f}%</p>
+            <p><strong>Precision:</strong> {performance_data['YOLOv8s']['Precision']:.1f}%</p>
+            <p><strong>Recall:</strong> {performance_data['YOLOv8s']['Recall']:.1f}%</p>
+            <p><em>Balanced speed and accuracy</em></p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with perf_col2:
+        st.markdown(f"""
+        <div class="model-comparison">
+            <h4>🔵 YOLOv11s</h4>
+            <p><strong>mAP@0.5:</strong> {performance_data['YOLOv11s']['mAP50']:.1f}%</p>
+            <p><strong>Precision:</strong> {performance_data['YOLOv11s']['Precision']:.1f}%</p>
+            <p><strong>Recall:</strong> {performance_data['YOLOv11s']['Recall']:.1f}%</p>
+            <p><em>Latest model architecture</em></p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with perf_col3:
+        st.markdown(f"""
+        <div class="model-comparison">
+            <h4>🔴 Roboflow 3.0</h4>
+            <p><strong>mAP@0.5:</strong> {performance_data['Roboflow']['mAP50']:.1f}%</p>
+            <p><strong>Precision:</strong> {performance_data['Roboflow']['Precision']:.1f}%</p>
+            <p><strong>Recall:</strong> {performance_data['Roboflow']['Recall']:.1f}%</p>
+            <p><em>Enhanced training pipeline</em></p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Quick Start Guide
+    st.markdown('<h2 class="sub-header">🚀 Quick Start Guide</h2>', unsafe_allow_html=True)
+    
+    with st.expander("📖 How to Use This App", expanded=False):
+        st.markdown("""
+        ### Step 1: Choose Your Detection Mode
+        - **📸 Image Upload:** Upload your own furniture images
+        - **🎥 Video Upload:** Process furniture detection in videos
+        - **🖼️ Sample Gallery:** Test with pre-loaded samples
+        - **📹 Live Webcam:** Real-time furniture detection
+        - **📂 Batch Processing:** Process multiple files at once
+        
+        ### Step 2: Configure Settings
+        - Select your preferred YOLO model (YOLOv8s, YOLOv11s, or Roboflow)
+        - Adjust confidence threshold (0.0 - 1.0)
+        - Choose which furniture classes to detect
+        - Enable model comparison mode for benchmarking
+        
+        ### Step 3: Upload or Select Content
+        - Upload your images/videos or choose from sample gallery
+        - The app supports JPG, PNG, BMP for images and MP4, AVI, MOV for videos
+        
+        ### Step 4: Analyze Results
+        - View detected furniture with bounding boxes and confidence scores
+        - Compare results between different models
+        - Export detection data in JSON, CSV, or Excel format
+        - Download processed videos with annotations
+        
+        ### Step 5: Explore Performance Analytics
+        - Visit the "📊 Model Performance" page to see detailed training metrics
+        - Compare model accuracies, precision, and recall
+        - View confusion matrices and performance curves
+        """)
+    
+    # Use Cases
+    st.markdown('<h2 class="sub-header">🎯 Use Cases & Applications</h2>', unsafe_allow_html=True)
+    
+    use_case_col1, use_case_col2 = st.columns(2)
+    
+    with use_case_col1:
+        st.markdown("""
+        **🏠 Real Estate & Property**
+        - Automated furniture inventory
+        - Property staging verification
+        - Virtual home tours enhancement
+        - Rental property documentation
+        
+        **🛒 E-commerce & Retail**
+        - Product cataloging automation
+        - Furniture recommendation systems
+        - Inventory management
+        - Visual search functionality
+        """)
+    
+    with use_case_col2:
+        st.markdown("""
+        **🏗️ Interior Design**
+        - Space planning assistance
+        - Furniture arrangement optimization
+        - Design portfolio analysis
+        - Client presentation tools
+        
+        **🔬 Research & Development**
+        - Computer vision model benchmarking
+        - Furniture detection algorithm testing
+        - Academic research applications
+        - AI model comparison studies
+        """)
+    
+    # System Requirements
+    st.markdown('<h2 class="sub-header">💻 System Requirements</h2>', unsafe_allow_html=True)
+    
+    req_col1, req_col2 = st.columns(2)
+    
+    with req_col1:
+        st.markdown("""
+        **Minimum Requirements:**
+        - Python 3.8+
+        - 4GB RAM
+        - 2GB free storage
+        - CPU with SSE4.2 support
+        - Modern web browser
+        """)
+    
+    with req_col2:
+        st.markdown("""
+        **Recommended for Best Performance:**
+        - Python 3.9+
+        - 8GB+ RAM
+        - NVIDIA GPU with CUDA support
+        - 5GB+ free storage
+        - Chrome/Firefox browser
+        """)
+    
+    # Credits and Acknowledgments
+    st.markdown('<h2 class="sub-header">🙏 Credits & Acknowledgments</h2>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="model-info">
+        <h4>Built with ❤️ using:</h4>
+        <ul>
+            <li><strong>Ultralytics YOLO</strong> - State-of-the-art object detection framework</li>
+            <li><strong>Streamlit</strong> - Beautiful web app framework for machine learning</li>
+            <li><strong>OpenCV</strong> - Computer vision and image processing</li>
+            <li><strong>Roboflow</strong> - Enhanced model training and data management</li>
+            <li><strong>PyTorch</strong> - Deep learning framework</li>
+        </ul>
+        
+        <h4>Special Thanks:</h4>
+        <p>To the open-source community and researchers who made YOLO, Streamlit, and other amazing tools available for building intelligent applications.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Version and Updates
+    st.markdown('<h2 class="sub-header">📋 Version Information</h2>', unsafe_allow_html=True)
+    
+    version_col1, version_col2 = st.columns(2)
+    
+    with version_col1:
+        st.info("""
+        **Current Version:** 1.0.0
+        **Release Date:** July 2025
+        **Last Updated:** July 3, 2025
+        """)
+    
+    with version_col2:
+        st.success("""
+        **✨ Latest Features:**
+        - Multi-model comparison
+        - Sample gallery integration
+        - Performance analytics dashboard
+        - Enhanced export capabilities
+        """)
+    
+    # Contact and Support
+    st.markdown('<h2 class="sub-header">📞 Support & Contact</h2>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="model-comparison">
+        <h4>Need Help or Have Questions?</h4>
+        <p>🐛 <strong>Found a bug?</strong> Please report it on our GitHub repository</p>
+        <p>💡 <strong>Have a feature request?</strong> We'd love to hear your ideas!</p>
+        <p>📚 <strong>Need documentation?</strong> Check our README.md for detailed setup instructions</p>
+        <p>🤝 <strong>Want to contribute?</strong> Pull requests are welcome!</p>
+        
+        <br>
+        <p><em>This app is open-source and continuously improving. Thank you for using our Furniture Detection App!</em></p>
+    </div>
+    """, unsafe_allow_html=True)
+
 @st.cache_resource
 def load_model(model_path, model_name):
     """Load YOLO model with caching"""
@@ -508,6 +1000,9 @@ def compare_models(detections_dict):
     return pd.DataFrame(comparison_data)
 
 def main():
+    # Create sample folders on first run
+    create_sample_folders()
+    
     # Header
     st.markdown('<h1 class="main-header">🪑 Furniture Detection App</h1>', unsafe_allow_html=True)
     st.markdown("**Powered by YOLOv8s & YOLOv11s | Compare Model Performance**")
@@ -544,13 +1039,17 @@ def main():
     st.sidebar.markdown("### 🧭 Navigation")
     page = st.sidebar.selectbox(
         "Choose Page",
-        ["🪑 Furniture Detection", "📊 Model Performance"],
+        ["🪑 Furniture Detection", "📊 Model Performance", "ℹ️ About"],
         index=0
     )
     
     if page == "📊 Model Performance":
         display_model_performance()
         return
+    elif page == "ℹ️ About":
+        display_about_page()
+        return
+    
     # Custom model paths
     with st.sidebar.expander("🛠️ Custom Model Paths"):
         yolov8_path = st.text_input(
@@ -643,7 +1142,7 @@ def main():
     st.sidebar.markdown("### 📱 Detection Mode")
     mode = st.sidebar.selectbox(
         "Choose Detection Mode",
-        ["📸 Image Upload", "🎥 Video Upload", "📹 Webcam (Live)", "📂 Batch Processing"]
+        ["📸 Image Upload", "🎥 Video Upload", "📹 Webcam (Live)", "📂 Batch Processing", "🖼️ Sample Gallery"]
     )
     
     # Main content area
@@ -653,7 +1152,240 @@ def main():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        if mode == "📸 Image Upload":
+        if mode == "🖼️ Sample Gallery":
+            st.markdown('<h2 class="sub-header">🖼️ Sample Gallery</h2>', unsafe_allow_html=True)
+            st.markdown("**Test the models with pre-loaded sample images and videos from the repository**")
+            
+            # Add file browser section
+            with st.expander("📁 Browse Current Directory", expanded=False):
+                current_dir = Path('.')
+                st.write(f"**Current Directory:** `{current_dir.absolute()}`")
+                
+                # List all files and directories
+                items = list(current_dir.iterdir())
+                if items:
+                    for item in sorted(items):
+                        if item.is_dir():
+                            st.write(f"📁 {item.name}/")
+                        else:
+                            st.write(f"📄 {item.name}")
+                else:
+                    st.write("No items found in current directory")
+                
+                # Show examples folder specifically if it exists
+                examples_path = Path('examples')
+                if examples_path.exists():
+                    st.write("\n**Examples folder contents:**")
+                    for item in examples_path.rglob('*'):
+                        if item.is_file():
+                            relative_path = item.relative_to(examples_path)
+                            st.write(f"  📄 {relative_path}")
+            
+            # Alternative: Upload samples directly
+            with st.expander("📤 Upload Sample Files", expanded=False):
+                st.markdown("**Can't find sample files? Upload them directly:**")
+                
+                # Create two columns for images and videos
+                upload_col1, upload_col2 = st.columns(2)
+                
+                with upload_col1:
+                    st.markdown("**📸 Upload Sample Images:**")
+                    uploaded_images = st.file_uploader(
+                        "Upload sample images",
+                        type=['jpg', 'jpeg', 'png', 'bmp', 'tiff'],
+                        accept_multiple_files=True,
+                        help="Upload images that will be saved as samples",
+                        key="image_uploader"
+                    )
+                    
+                    if uploaded_images:
+                        examples_dir = Path('examples/images')
+                        examples_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        for uploaded_file in uploaded_images:
+                            # Save uploaded file to examples
+                            file_path = examples_dir / uploaded_file.name
+                            with open(file_path, 'wb') as f:
+                                f.write(uploaded_file.getvalue())
+                        
+                        st.success(f"✅ Uploaded {len(uploaded_images)} images to examples/images/")
+                        st.info("🔄 Refresh the page to see them in the gallery!")
+                
+                with upload_col2:
+                    st.markdown("**🎥 Upload Sample Videos:**")
+                    uploaded_videos = st.file_uploader(
+                        "Upload sample videos",
+                        type=['mp4', 'avi', 'mov', 'mkv', 'webm'],
+                        accept_multiple_files=True,
+                        help="Upload videos that will be saved as samples",
+                        key="video_uploader"
+                    )
+                    
+                    if uploaded_videos:
+                        examples_dir = Path('examples/videos')
+                        examples_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        for uploaded_file in uploaded_videos:
+                            # Save uploaded file to examples
+                            file_path = examples_dir / uploaded_file.name
+                            with open(file_path, 'wb') as f:
+                                f.write(uploaded_file.getvalue())
+                        
+                        st.success(f"✅ Uploaded {len(uploaded_videos)} videos to examples/videos/")
+                        st.info("🔄 Refresh the page to see them in the gallery!")
+                
+                # Show upload status summary
+                if uploaded_images or uploaded_videos:
+                    total_uploaded = len(uploaded_images or []) + len(uploaded_videos or [])
+                    st.info(f"📊 Total files uploaded this session: {total_uploaded}")
+                    
+                    if st.button("🔄 Refresh Gallery Now"):
+                        st.rerun()
+            
+            # Gallery type selection
+            gallery_type = st.radio(
+                "Choose Sample Type",
+                ["📸 Sample Images", "🎥 Sample Videos"],
+                horizontal=True
+            )
+            
+            if gallery_type == "📸 Sample Images":
+                # Display image gallery
+                selected_sample = display_sample_gallery('images')
+                
+                if selected_sample:
+                    st.success(f"✅ Selected: {selected_sample['name']}")
+                    
+                    try:
+                        # Load and display the selected image
+                        image = Image.open(selected_sample['path'])
+                        st.subheader("📸 Selected Sample Image")
+                        st.image(image, caption=f"Sample: {selected_sample['name']}", use_column_width=True)
+                        
+                        # Process with selected model(s)
+                        all_detections = {}
+                        inference_times = {}
+                        
+                        with st.spinner("🔍 Detecting furniture in sample image..."):
+                            for model_name, model in models.items():
+                                processed_img, detections, inf_time = process_image(
+                                    image, model, confidence_threshold, selected_classes, model_name
+                                )
+                                all_detections[model_name] = detections
+                                inference_times[model_name] = inf_time
+                                
+                                # Display results
+                                st.subheader(f"🎯 {MODEL_CONFIGS[model_name]['icon']} {model_name} Results")
+                                st.image(processed_img, caption=f"Detected by {model_name}", use_column_width=True)
+                                st.caption(f"⏱️ Inference time: {inf_time:.3f}s")
+                        
+                        # Show detection statistics
+                        with col2:
+                            st.markdown('<div class="detection-stats">', unsafe_allow_html=True)
+                            st.markdown("### 📊 Detection Summary")
+                            
+                            # Show results for each model
+                            for model_name, detections in all_detections.items():
+                                st.markdown(f"#### {MODEL_CONFIGS[model_name]['icon']} {model_name}")
+                                
+                                if detections:
+                                    # Count detections by class
+                                    class_counts = {}
+                                    for det in detections:
+                                        class_name = det['class']
+                                        class_counts[class_name] = class_counts.get(class_name, 0) + 1
+                                    
+                                    st.write(f"**Total Detections:** {len(detections)}")
+                                    st.write(f"**Inference Time:** {inference_times[model_name]:.3f}s")
+                                    st.write("**Detected Items:**")
+                                    
+                                    for class_name, count in class_counts.items():
+                                        st.write(f"• {class_name}: {count}")
+                                else:
+                                    st.write("No furniture detected with current settings.")
+                                
+                                st.markdown("---")
+                            
+                            # Model comparison
+                            if compare_mode and len(all_detections) > 1:
+                                st.markdown("### 🔬 Model Comparison")
+                                comparison_df = compare_models(all_detections)
+                                if comparison_df is not None:
+                                    st.dataframe(comparison_df)
+                            
+                            st.markdown('</div>', unsafe_allow_html=True)
+                            
+                    except Exception as e:
+                        st.error(f"Error processing sample image: {str(e)}")
+            
+            elif gallery_type == "🎥 Sample Videos":
+                # Display video gallery
+                selected_sample = display_sample_gallery('videos')
+                
+                if selected_sample:
+                    st.success(f"✅ Selected: {selected_sample['name']}")
+                    
+                    try:
+                        # Display video info and player
+                        st.subheader("🎥 Selected Sample Video")
+                        st.video(selected_sample['path'])
+                        st.caption(f"Sample: {selected_sample['name']} ({selected_sample['size'] / (1024*1024):.1f} MB)")
+                        
+                        # Model selection for video processing
+                        if compare_mode:
+                            st.warning("⚠️ Video comparison mode processes with both models sequentially")
+                        
+                        if st.button("🚀 Start Video Processing"):
+                            all_video_detections = {}
+                            
+                            for model_name, model in models.items():
+                                st.subheader(f"Processing with {model_name}...")
+                                progress_bar = st.progress(0)
+                                
+                                with st.spinner(f"🎬 Processing sample video with {model_name}..."):
+                                    start_time = time.time()
+                                    processed_video_path, detections = process_video(
+                                        selected_sample['path'], model, confidence_threshold, selected_classes, model_name, progress_bar
+                                    )
+                                    processing_time = time.time() - start_time
+                                
+                                st.success(f"✅ {model_name} processed video in {processing_time:.2f} seconds!")
+                                all_video_detections[model_name] = detections
+                                
+                                # Display processed video
+                                with open(processed_video_path, 'rb') as f:
+                                    video_bytes = f.read()
+                                
+                                st.subheader(f"🎯 {model_name} Processed Video")
+                                st.video(video_bytes)
+                                
+                                # Download processed video
+                                st.download_button(
+                                    label=f"📥 Download {model_name} Video",
+                                    data=video_bytes,
+                                    file_name=f"{model_name}_processed_{selected_sample['name']}",
+                                    mime="video/mp4",
+                                    key=f"download_{model_name}_sample"
+                                )
+                            
+                            # Show statistics
+                            with col2:
+                                st.markdown("### 📊 Video Analysis")
+                                
+                                for model_name, detections in all_video_detections.items():
+                                    st.markdown(f"#### {MODEL_CONFIGS[model_name]['icon']} {model_name}")
+                                    st.write(f"**Total Detections:** {len(detections)}")
+                                    
+                                    if detections:
+                                        # Timeline analysis
+                                        df = pd.DataFrame(detections)
+                                        st.write("**Detection Timeline:**")
+                                        st.line_chart(df.groupby('class').size())
+                    
+                    except Exception as e:
+                        st.error(f"Error processing sample video: {str(e)}")
+        
+        elif mode == "📸 Image Upload":
             st.markdown('<h2 class="sub-header">📸 Image Detection</h2>', unsafe_allow_html=True)
             
             uploaded_file = st.file_uploader(
@@ -992,29 +1724,31 @@ def main():
                             st.dataframe(comparison_df)
                     
                     # Export batch results
-                    export_format = st.selectbox("Export Format", ["JSON", "CSV", "Excel"], key="batch_export")
-                    if st.button("📤 Export Batch Results"):
-                        # Combine all batch results
-                        combined_batch_results = []
-                        for model_results in all_batch_results.values():
-                            combined_batch_results.extend(model_results)
-                        
-                        export_data = export_results(combined_batch_results, export_format)
-                        if export_data:
-                            if export_format == "Excel":
-                                st.download_button(
-                                    label="Download Excel File",
-                                    data=export_data,
-                                    file_name=f"batch_detections_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                )
-                            else:
-                                st.download_button(
-                                    label=f"Download {export_format} File",
-                                    data=export_data,
-                                    file_name=f"batch_detections_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{export_format.lower()}",
-                                    mime="text/plain"
-                                )
+                    with col2:
+                        st.markdown("### 💾 Export Batch Results")
+                        export_format = st.selectbox("Export Format", ["JSON", "CSV", "Excel"], key="batch_export")
+                        if st.button("📤 Export Batch Results"):
+                            # Combine all batch results
+                            combined_batch_results = []
+                            for model_results in all_batch_results.values():
+                                combined_batch_results.extend(model_results)
+                            
+                            export_data = export_results(combined_batch_results, export_format)
+                            if export_data:
+                                if export_format == "Excel":
+                                    st.download_button(
+                                        label="Download Excel File",
+                                        data=export_data,
+                                        file_name=f"batch_detections_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                    )
+                                else:
+                                    st.download_button(
+                                        label=f"Download {export_format} File",
+                                        data=export_data,
+                                        file_name=f"batch_detections_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{export_format.lower()}",
+                                        mime="text/plain"
+                                    )
     
     # Footer
     st.markdown("---")

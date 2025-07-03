@@ -144,11 +144,21 @@ def get_sample_files():
         'videos': []
     }
     
+    # Debug: Show current working directory and existing files
+    current_dir = os.getcwd()
+    st.sidebar.info(f"📁 Current directory: {current_dir}")
+    
     # Check multiple possible directories for samples
     for sample_dir in sample_dirs:
-        if os.path.exists(sample_dir):
+        dir_path = Path(sample_dir)
+        if dir_path.exists():
+            st.sidebar.success(f"✅ Found directory: {sample_dir}")
+            
             # Get all files in the directory
-            for file_path in Path(sample_dir).rglob('*'):
+            files_found = list(dir_path.rglob('*'))
+            st.sidebar.info(f"📄 Files in {sample_dir}: {len(files_found)}")
+            
+            for file_path in files_found:
                 if file_path.is_file():
                     file_ext = file_path.suffix.lower()
                     relative_path = str(file_path)
@@ -160,6 +170,7 @@ def get_sample_files():
                             'type': 'image',
                             'size': file_path.stat().st_size
                         })
+                        st.sidebar.success(f"🖼️ Found image: {file_path.name}")
                     elif file_ext in video_extensions:
                         samples['videos'].append({
                             'name': file_path.name,
@@ -167,10 +178,17 @@ def get_sample_files():
                             'type': 'video',
                             'size': file_path.stat().st_size
                         })
+                        st.sidebar.success(f"🎥 Found video: {file_path.name}")
+        else:
+            st.sidebar.warning(f"❌ Directory not found: {sample_dir}")
     
-    # If no samples found, create some placeholder info
+    # Show what we found
+    st.sidebar.info(f"📊 Total images found: {len(samples['images'])}")
+    st.sidebar.info(f"📊 Total videos found: {len(samples['videos'])}")
+    
+    # If no samples found, offer helpful guidance
     if not samples['images'] and not samples['videos']:
-        st.warning("⚠️ No sample files found. Please add sample images/videos to the 'examples' folder.")
+        st.warning("⚠️ No sample files found. Please add your own sample images/videos!")
         
         # Suggest folder structure
         st.info("""
@@ -186,6 +204,11 @@ def get_sample_files():
             ├── room_tour.mp4
             └── furniture_showcase.mp4
         ```
+        
+        **Setup Options:**
+        1. Use the "📤 Upload Sample Files" section below to add images and videos
+        2. Or manually add your files to the `examples/images/` and `examples/videos/` folders
+        3. Restart the app to see your samples
         """)
     
     return samples
@@ -1132,6 +1155,92 @@ def main():
         if mode == "🖼️ Sample Gallery":
             st.markdown('<h2 class="sub-header">🖼️ Sample Gallery</h2>', unsafe_allow_html=True)
             st.markdown("**Test the models with pre-loaded sample images and videos from the repository**")
+            
+            # Add file browser section
+            with st.expander("📁 Browse Current Directory", expanded=False):
+                current_dir = Path('.')
+                st.write(f"**Current Directory:** `{current_dir.absolute()}`")
+                
+                # List all files and directories
+                items = list(current_dir.iterdir())
+                if items:
+                    for item in sorted(items):
+                        if item.is_dir():
+                            st.write(f"📁 {item.name}/")
+                        else:
+                            st.write(f"📄 {item.name}")
+                else:
+                    st.write("No items found in current directory")
+                
+                # Show examples folder specifically if it exists
+                examples_path = Path('examples')
+                if examples_path.exists():
+                    st.write("\n**Examples folder contents:**")
+                    for item in examples_path.rglob('*'):
+                        if item.is_file():
+                            relative_path = item.relative_to(examples_path)
+                            st.write(f"  📄 {relative_path}")
+            
+            # Alternative: Upload samples directly
+            with st.expander("📤 Upload Sample Files", expanded=False):
+                st.markdown("**Can't find sample files? Upload them directly:**")
+                
+                # Create two columns for images and videos
+                upload_col1, upload_col2 = st.columns(2)
+                
+                with upload_col1:
+                    st.markdown("**📸 Upload Sample Images:**")
+                    uploaded_images = st.file_uploader(
+                        "Upload sample images",
+                        type=['jpg', 'jpeg', 'png', 'bmp', 'tiff'],
+                        accept_multiple_files=True,
+                        help="Upload images that will be saved as samples",
+                        key="image_uploader"
+                    )
+                    
+                    if uploaded_images:
+                        examples_dir = Path('examples/images')
+                        examples_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        for uploaded_file in uploaded_images:
+                            # Save uploaded file to examples
+                            file_path = examples_dir / uploaded_file.name
+                            with open(file_path, 'wb') as f:
+                                f.write(uploaded_file.getvalue())
+                        
+                        st.success(f"✅ Uploaded {len(uploaded_images)} images to examples/images/")
+                        st.info("🔄 Refresh the page to see them in the gallery!")
+                
+                with upload_col2:
+                    st.markdown("**🎥 Upload Sample Videos:**")
+                    uploaded_videos = st.file_uploader(
+                        "Upload sample videos",
+                        type=['mp4', 'avi', 'mov', 'mkv', 'webm'],
+                        accept_multiple_files=True,
+                        help="Upload videos that will be saved as samples",
+                        key="video_uploader"
+                    )
+                    
+                    if uploaded_videos:
+                        examples_dir = Path('examples/videos')
+                        examples_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        for uploaded_file in uploaded_videos:
+                            # Save uploaded file to examples
+                            file_path = examples_dir / uploaded_file.name
+                            with open(file_path, 'wb') as f:
+                                f.write(uploaded_file.getvalue())
+                        
+                        st.success(f"✅ Uploaded {len(uploaded_videos)} videos to examples/videos/")
+                        st.info("🔄 Refresh the page to see them in the gallery!")
+                
+                # Show upload status summary
+                if uploaded_images or uploaded_videos:
+                    total_uploaded = len(uploaded_images or []) + len(uploaded_videos or [])
+                    st.info(f"📊 Total files uploaded this session: {total_uploaded}")
+                    
+                    if st.button("🔄 Refresh Gallery Now"):
+                        st.rerun()
             
             # Gallery type selection
             gallery_type = st.radio(
