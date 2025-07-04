@@ -1669,7 +1669,7 @@ def main():
         
         elif mode == "📹 Webcam (Live)":
             st.markdown('<h2 class="sub-header">📹 Live Webcam Detection</h2>', unsafe_allow_html=True)
-            
+            xtime = 0.02
             # Model selection for webcam
             if compare_mode:
                 st.warning("⚠️ Live comparison mode not supported in WebRTC mode. Please select a single model.")
@@ -1749,7 +1749,6 @@ def main():
                                 st.write("*Try adjusting the confidence threshold or ensure furniture is visible*")
                         
                         # Auto-refresh every 2 seconds for live updates
-                        xtime = 0.02
                         time.sleep(xtime)
                         st.rerun()
                     
