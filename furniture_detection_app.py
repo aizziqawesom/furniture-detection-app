@@ -1580,160 +1580,162 @@ def main():
         elif mode == "📹 Webcam (Live)":
                     st.markdown('<h2 class="sub-header">📹 Live Webcam Detection</h2>', unsafe_allow_html=True)
                     
-                    # Initialize session state for webcam
-                    if 'webcam_running' not in st.session_state:
-                        st.session_state.webcam_running = False
-                    if 'webcam_cap' not in st.session_state:
-                        st.session_state.webcam_cap = None
-                    
-                    # Auto-detect available cameras
-                    def detect_cameras():
-                        available_cameras = []
-                        for i in range(10):  # Check first 10 indices
-                            cap = cv2.VideoCapture(i)
-                            if cap.isOpened():
-                                available_cameras.append(i)
-                                cap.release()
-                        return available_cameras
-                    
-                    # Get available cameras
-                    if 'available_cameras' not in st.session_state:
-                        with st.spinner("🔍 Detecting available cameras..."):
-                            st.session_state.available_cameras = detect_cameras()
-                    
-                    available_cameras = st.session_state.available_cameras
-                    
-                    if not available_cameras:
-                        st.error("❌ No cameras detected! Please check your camera connection.")
-                        st.info("💡 Try refreshing the page or connecting a camera.")
-                        if st.button("🔄 Refresh Camera Detection"):
-                            del st.session_state.available_cameras
-                            st.rerun()
-                        return
-                    
-                    st.success(f"✅ Found {len(available_cameras)} camera(s): {available_cameras}")
-                    
-                    # Webcam settings
-                    webcam_source = st.selectbox(
-                        "Camera Source", 
-                        available_cameras, 
-                        help=f"Select from available cameras: {available_cameras}"
-                    )
-                    
                     # Model selection for webcam
                     if compare_mode:
-                        st.info("ℹ️ Live comparison mode will alternate between models")
-                        frame_interval = st.slider("Model Switch Interval (frames)", 1, 30, 10)
+                        st.warning("⚠️ Live comparison mode not supported in WebRTC mode. Please select a single model.")
+                        webrtc_model_name = st.selectbox(
+                            "Select Model for Live Detection",
+                            options=list(models.keys()),
+                            help="Choose which model to use for real-time detection"
+                        )
                     else:
-                        frame_interval = 1
+                        webrtc_model_name = selected_model
                     
-                    # Control buttons
-                    col_start, col_stop = st.columns(2)
+                    webrtc_model = models[webrtc_model_name]
                     
-                    with col_start:
-                        if st.button("🎥 Start Webcam", disabled=st.session_state.webcam_running):
-                            try:
-                                st.session_state.webcam_cap = cv2.VideoCapture(webcam_source)
-                                
-                                # Test if camera actually works
-                                ret, test_frame = st.session_state.webcam_cap.read()
-                                if not ret or test_frame is None:
-                                    raise Exception("Camera opened but cannot read frames")
-                                
-                                st.session_state.webcam_running = True
-                                st.success("✅ Webcam started successfully!")
-                                st.rerun()
-                                
-                            except Exception as e:
-                                st.error(f"❌ Could not start webcam {webcam_source}: {str(e)}")
-                                st.info("💡 Try selecting a different camera or check camera permissions.")
-                                if st.session_state.webcam_cap is not None:
-                                    st.session_state.webcam_cap.release()
-                                    st.session_state.webcam_cap = None
-                                st.session_state.webcam_running = False
+                    # Create video processor
+                    if 'video_processor' not in st.session_state or st.session_state.get('last_model') != webrtc_model_name:
+                        st.session_state.video_processor = VideoProcessor(
+                            webrtc_model, confidence_threshold, selected_classes, webrtc_model_name
+                        )
+                        st.session_state.last_model = webrtc_model_name
                     
-                    with col_stop:
-                        if st.button("⏹️ Stop Webcam", disabled=not st.session_state.webcam_running):
-                            st.session_state.webcam_running = False
-                            if st.session_state.webcam_cap is not None:
-                                st.session_state.webcam_cap.release()
-                                st.session_state.webcam_cap = None
-                            st.success("✅ Webcam stopped!")
-                            st.rerun()
+                    # WebRTC streamer
+                    st.markdown("### 🎥 Live Camera Feed")
+                    st.info("📱 **Click 'START' to begin webcam detection. Allow camera access when prompted.**")
                     
-                    # Webcam feed
-                    if st.session_state.webcam_running and st.session_state.webcam_cap is not None:
-                        # Create placeholders
-                        frame_placeholder = st.empty()
-                        
+                    webrtc_ctx = webrtc_streamer(
+                        key="furniture-detection",
+                        mode=WebRtcMode.SENDRECV,
+                        rtc_configuration=RTC_CONFIGURATION,
+                        video_processor_factory=lambda: st.session_state.video_processor,
+                        media_stream_constraints={"video": True, "audio": False},
+                        async_processing=True,
+                    )
+                    
+                    # Live detection display
+                    if webrtc_ctx.video_processor:
                         with col2:
+                            st.markdown(f"### 🔴 Live Detections - {MODEL_CONFIGS[webrtc_model_name]['icon']} {webrtc_model_name}")
+                            
+                            # Create placeholder for live updates
                             detection_placeholder = st.empty()
-                        
-                        # Initialize frame counter if not exists
-                        if 'frame_count' not in st.session_state:
-                            st.session_state.frame_count = 0
-                        if 'current_model_idx' not in st.session_state:
-                            st.session_state.current_model_idx = 0
-                        
-                        model_names = list(models.keys())
-                        
-                        # Read frame
-                        ret, frame = st.session_state.webcam_cap.read()
-                        
-                        if ret:
-                            # Convert frame for processing
-                            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                            pil_image = Image.fromarray(frame_rgb)
                             
-                            # Select model for processing
-                            if compare_mode:
-                                if st.session_state.frame_count % frame_interval == 0:
-                                    st.session_state.current_model_idx = (st.session_state.current_model_idx + 1) % len(model_names)
-                                current_model_name = model_names[st.session_state.current_model_idx]
-                            else:
-                                current_model_name = selected_model
-                            
-                            current_model = models[current_model_name]
-                            
-                            # Process frame
-                            processed_img, detections, inf_time = process_image(
-                                pil_image, current_model, confidence_threshold, selected_classes, current_model_name
-                            )
-                            
-                            # Display frame
-                            frame_placeholder.image(
-                                processed_img, 
-                                caption=f"Live Feed - {MODEL_CONFIGS[current_model_name]['icon']} {current_model_name} ({inf_time:.3f}s)", 
-                                use_column_width=True
-                            )
-                            
-                            # Update detection info
-                            with detection_placeholder.container():
-                                st.markdown(f"### 🔴 Live Detections - {current_model_name}")
-                                if detections:
-                                    for det in detections:
-                                        confidence_color = "green" if det['confidence'] > 0.8 else "orange" if det['confidence'] > 0.6 else "red"
-                                        st.markdown(
-                                            f'<span class="confidence-box" style="background-color: {confidence_color};">'
-                                            f'{det["class"]}: {det["confidence"]:.2f}</span>',
-                                            unsafe_allow_html=True
-                                        )
-                                else:
-                                    st.write("No detections")
-                            
-                            st.session_state.frame_count += 1
-                            
-                            # Auto-refresh for continuous feed
-                            time.sleep(0.1)
-                            st.rerun()
-                        
-                        else:
-                            st.error("❌ Failed to read from webcam")
-                            st.session_state.webcam_running = False
-                            if st.session_state.webcam_cap is not None:
-                                st.session_state.webcam_cap.release()
-                                st.session_state.webcam_cap = None
+                            # Update detection display periodically
+                            if webrtc_ctx.state.playing:
+                                # Get latest detections
+                                latest_detections = st.session_state.video_processor.get_latest_detections()
                                 
+                                with detection_placeholder.container():
+                                    if latest_detections:
+                                        st.markdown("**Current Detections:**")
+                                        
+                                        # Group by class for cleaner display
+                                        class_counts = {}
+                                        for det in latest_detections:
+                                            class_name = det['class']
+                                            if class_name not in class_counts:
+                                                class_counts[class_name] = []
+                                            class_counts[class_name].append(det['confidence'])
+                                        
+                                        # Display detection summary
+                                        for class_name, confidences in class_counts.items():
+                                            avg_conf = np.mean(confidences)
+                                            count = len(confidences)
+                                            confidence_color = "green" if avg_conf > 0.8 else "orange" if avg_conf > 0.6 else "red"
+                                            
+                                            st.markdown(
+                                                f'<div style="background-color: {confidence_color}; color: white; '
+                                                f'padding: 0.5rem; margin: 0.2rem 0; border-radius: 0.3rem; '
+                                                f'display: inline-block; min-width: 200px;">'
+                                                f'<strong>{class_name.title()}</strong>: {count}x (avg: {avg_conf:.2f})</div>',
+                                                unsafe_allow_html=True
+                                            )
+                                        
+                                        # Detection statistics
+                                        st.metric("Total Objects", len(latest_detections))
+                                        st.metric("Unique Classes", len(class_counts))
+                                        
+                                    else:
+                                        st.write("🔍 No furniture detected")
+                                        st.write("*Try adjusting the confidence threshold or ensure furniture is visible*")
+                                
+                                # Auto-refresh every 2 seconds for live updates
+                                time.sleep(2)
+                                st.rerun()
+                            
+                            else:
+                                st.write("📹 Camera not active")
+                                st.write("*Click START above to begin detection*")
+                        
+                        # Settings panel
+                        st.markdown("### ⚙️ Live Detection Settings")
+                        
+                        # Real-time confidence adjustment
+                        new_confidence = st.slider(
+                            "Real-time Confidence Threshold",
+                            min_value=0.0,
+                            max_value=1.0,
+                            value=confidence_threshold,
+                            step=0.05,
+                            help="Adjust confidence threshold in real-time"
+                        )
+                        
+                        # Update processor if confidence changed
+                        if new_confidence != st.session_state.video_processor.confidence_threshold:
+                            st.session_state.video_processor.confidence_threshold = new_confidence
+                        
+                        # Real-time class filter
+                        new_classes = st.multiselect(
+                            "Real-time Class Filter",
+                            options=FURNITURE_CLASSES,
+                            default=selected_classes,
+                            help="Adjust detected classes in real-time"
+                        )
+                        
+                        # Update processor if classes changed
+                        if set(new_classes) != set(st.session_state.video_processor.selected_classes):
+                            st.session_state.video_processor.selected_classes = new_classes
+                        
+                        # Performance info
+                        with st.expander("📊 Performance Info"):
+                            st.write(f"**Model:** {webrtc_model_name}")
+                            st.write(f"**Confidence Threshold:** {new_confidence}")
+                            st.write(f"**Active Classes:** {len(new_classes)}")
+                            st.write("**Stream Status:** " + ("🟢 Active" if webrtc_ctx.state.playing else "🔴 Inactive"))
+                    
+                    else:
+                        st.warning("⚠️ Video processor not initialized. Please refresh the page.")
+                    
+                    # Instructions
+                    with st.expander("📖 Webcam Instructions", expanded=False):
+                        st.markdown("""
+                        **How to use Live Webcam Detection:**
+                        
+                        1. **Click 'START'** to begin webcam feed
+                        2. **Allow camera access** when your browser prompts
+                        3. **Position furniture** in view of the camera
+                        4. **Adjust settings** in real-time using the controls on the right
+                        5. **Click 'STOP'** to end the session
+                        
+                        **Tips for better detection:**
+                        - Ensure good lighting
+                        - Keep furniture clearly visible
+                        - Avoid excessive camera movement
+                        - Lower confidence threshold to detect more objects
+                        - Higher confidence threshold for more accurate detections
+                        
+                        **Troubleshooting:**
+                        - If camera doesn't start, check browser permissions
+                        - If detection is slow, try reducing the number of active classes
+                        - Refresh the page if video processor fails to initialize
+                        """)
+                    
+                    # Technical note
+                    st.info("""
+                    💡 **Technical Note:** This live detection uses WebRTC for real-time video streaming 
+                    and processing. Detection results are updated every 2 seconds while the camera is active.
+                    """)
         elif mode == "📂 Batch Processing":
             st.markdown('<h2 class="sub-header">📂 Batch Processing</h2>', unsafe_allow_html=True)
             
