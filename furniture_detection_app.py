@@ -1668,164 +1668,182 @@ def main():
                 os.unlink(video_path)
         
         elif mode == "📹 Webcam (Live)":
-                    st.markdown('<h2 class="sub-header">📹 Live Webcam Detection</h2>', unsafe_allow_html=True)
-                    
-                    # Model selection for webcam
-                    if compare_mode:
-                        st.warning("⚠️ Live comparison mode not supported in WebRTC mode. Please select a single model.")
-                        webrtc_model_name = st.selectbox(
-                            "Select Model for Live Detection",
-                            options=list(models.keys()),
-                            help="Choose which model to use for real-time detection"
-                        )
-                    else:
-                        webrtc_model_name = selected_model
-                    
-                    webrtc_model = models[webrtc_model_name]
-                    
-                    # Create video processor
-                    if 'video_processor' not in st.session_state or st.session_state.get('last_model') != webrtc_model_name:
-                        st.session_state.video_processor = VideoProcessor(
-                            webrtc_model, confidence_threshold, selected_classes, webrtc_model_name
-                        )
-                        st.session_state.last_model = webrtc_model_name
-                    
-                    # WebRTC streamer
-                    st.markdown("### 🎥 Live Camera Feed")
-                    st.info("📱 **Click 'START' to begin webcam detection. Allow camera access when prompted.**")
-                    
-                    webrtc_ctx = webrtc_streamer(
-                        key="furniture-detection",
-                        mode=WebRtcMode.SENDRECV,
-                        rtc_configuration=RTC_CONFIGURATION,
-                        video_processor_factory=lambda: st.session_state.video_processor,
-                        media_stream_constraints={"video": True, "audio": False},
-                        async_processing=True,
+            st.markdown('<h2 class="sub-header">📹 Live Webcam Detection</h2>', unsafe_allow_html=True)
+            
+            # Model selection for webcam
+            if compare_mode:
+                st.warning("⚠️ Live comparison mode not supported in WebRTC mode. Please select a single model.")
+                webrtc_model_name = st.selectbox(
+                    "Select Model for Live Detection",
+                    options=list(models.keys()),
+                    help="Choose which model to use for real-time detection"
+                )
+            else:
+                webrtc_model_name = selected_model
+            
+            webrtc_model = models[webrtc_model_name]
+            
+            # Initialize video processor in session state (ALWAYS initialize before webrtc_streamer)
+            if 'video_processor' not in st.session_state:
+                st.session_state.video_processor = None
+                st.session_state.last_model = None
+            
+            # Create or update video processor if needed
+            if (st.session_state.video_processor is None or 
+                st.session_state.last_model != webrtc_model_name):
+                
+                st.session_state.video_processor = VideoProcessor(
+                    webrtc_model, confidence_threshold, selected_classes, webrtc_model_name
+                )
+                st.session_state.last_model = webrtc_model_name
+            
+            # WebRTC streamer
+            st.markdown("### 🎥 Live Camera Feed")
+            st.info("📱 **Click 'START' to begin webcam detection. Allow camera access when prompted.**")
+            
+            # Create a safe video processor factory function
+            def create_video_processor():
+                if st.session_state.video_processor is not None:
+                    return st.session_state.video_processor
+                else:
+                    # Fallback: create a new one if session state is corrupted
+                    return VideoProcessor(
+                        webrtc_model, confidence_threshold, selected_classes, webrtc_model_name
                     )
+            
+            webrtc_ctx = webrtc_streamer(
+                key="furniture-detection",
+                mode=WebRtcMode.SENDRECV,
+                rtc_configuration=RTC_CONFIGURATION,
+                video_processor_factory=create_video_processor,
+                media_stream_constraints={"video": True, "audio": False},
+                async_processing=True,
+            )
+            
+            # Live detection display
+            if webrtc_ctx.video_processor:
+                with col2:
+                    st.markdown(f"### 🔴 Live Detections - {MODEL_CONFIGS[webrtc_model_name]['icon']} {webrtc_model_name}")
                     
-                    # Live detection display
-                    if webrtc_ctx.video_processor:
-                        with col2:
-                            st.markdown(f"### 🔴 Live Detections - {MODEL_CONFIGS[webrtc_model_name]['icon']} {webrtc_model_name}")
-                            
-                            # Create placeholder for live updates
-                            detection_placeholder = st.empty()
-                            
-                            # Update detection display periodically
-                            if webrtc_ctx.state.playing:
-                                # Get latest detections
-                                latest_detections = st.session_state.video_processor.get_latest_detections()
+                    # Create placeholder for live updates
+                    detection_placeholder = st.empty()
+                    
+                    # Update detection display periodically
+                    if webrtc_ctx.state.playing:
+                        # Get latest detections
+                        latest_detections = st.session_state.video_processor.get_latest_detections()
+                        
+                        with detection_placeholder.container():
+                            if latest_detections:
+                                st.markdown("**Current Detections:**")
                                 
-                                with detection_placeholder.container():
-                                    if latest_detections:
-                                        st.markdown("**Current Detections:**")
-                                        
-                                        # Group by class for cleaner display
-                                        class_counts = {}
-                                        for det in latest_detections:
-                                            class_name = det['class']
-                                            if class_name not in class_counts:
-                                                class_counts[class_name] = []
-                                            class_counts[class_name].append(det['confidence'])
-                                        
-                                        # Display detection summary
-                                        for class_name, confidences in class_counts.items():
-                                            avg_conf = np.mean(confidences)
-                                            count = len(confidences)
-                                            confidence_color = "green" if avg_conf > 0.8 else "orange" if avg_conf > 0.6 else "red"
-                                            
-                                            st.markdown(
-                                                f'<div style="background-color: {confidence_color}; color: white; '
-                                                f'padding: 0.5rem; margin: 0.2rem 0; border-radius: 0.3rem; '
-                                                f'display: inline-block; min-width: 200px;">'
-                                                f'<strong>{class_name.title()}</strong>: {count}x (avg: {avg_conf:.2f})</div>',
-                                                unsafe_allow_html=True
-                                            )
-                                        
-                                        # Detection statistics
-                                        st.metric("Total Objects", len(latest_detections))
-                                        st.metric("Unique Classes", len(class_counts))
-                                        
-                                    else:
-                                        st.write("🔍 No furniture detected")
-                                        st.write("*Try adjusting the confidence threshold or ensure furniture is visible*")
+                                # Group by class for cleaner display
+                                class_counts = {}
+                                for det in latest_detections:
+                                    class_name = det['class']
+                                    if class_name not in class_counts:
+                                        class_counts[class_name] = []
+                                    class_counts[class_name].append(det['confidence'])
                                 
-                                # Auto-refresh every 2 seconds for live updates
-                                time.sleep(2)
-                                st.rerun()
-                            
+                                # Display detection summary
+                                for class_name, confidences in class_counts.items():
+                                    avg_conf = np.mean(confidences)
+                                    count = len(confidences)
+                                    confidence_color = "green" if avg_conf > 0.8 else "orange" if avg_conf > 0.6 else "red"
+                                    
+                                    st.markdown(
+                                        f'<div style="background-color: {confidence_color}; color: white; '
+                                        f'padding: 0.5rem; margin: 0.2rem 0; border-radius: 0.3rem; '
+                                        f'display: inline-block; min-width: 200px;">'
+                                        f'<strong>{class_name.title()}</strong>: {count}x (avg: {avg_conf:.2f})</div>',
+                                        unsafe_allow_html=True
+                                    )
+                                
+                                # Detection statistics
+                                st.metric("Total Objects", len(latest_detections))
+                                st.metric("Unique Classes", len(class_counts))
+                                
                             else:
-                                st.write("📹 Camera not active")
-                                st.write("*Click START above to begin detection*")
+                                st.write("🔍 No furniture detected")
+                                st.write("*Try adjusting the confidence threshold or ensure furniture is visible*")
                         
-                        # Settings panel
-                        st.markdown("### ⚙️ Live Detection Settings")
-                        
-                        # Real-time confidence adjustment
-                        new_confidence = st.slider(
-                            "Real-time Confidence Threshold",
-                            min_value=0.0,
-                            max_value=1.0,
-                            value=confidence_threshold,
-                            step=0.05,
-                            help="Adjust confidence threshold in real-time"
-                        )
-                        
-                        # Update processor if confidence changed
-                        if new_confidence != st.session_state.video_processor.confidence_threshold:
-                            st.session_state.video_processor.confidence_threshold = new_confidence
-                        
-                        # Real-time class filter
-                        new_classes = st.multiselect(
-                            "Real-time Class Filter",
-                            options=FURNITURE_CLASSES,
-                            default=selected_classes,
-                            help="Adjust detected classes in real-time"
-                        )
-                        
-                        # Update processor if classes changed
-                        if set(new_classes) != set(st.session_state.video_processor.selected_classes):
-                            st.session_state.video_processor.selected_classes = new_classes
-                        
-                        # Performance info
-                        with st.expander("📊 Performance Info"):
-                            st.write(f"**Model:** {webrtc_model_name}")
-                            st.write(f"**Confidence Threshold:** {new_confidence}")
-                            st.write(f"**Active Classes:** {len(new_classes)}")
-                            st.write("**Stream Status:** " + ("🟢 Active" if webrtc_ctx.state.playing else "🔴 Inactive"))
+                        # Auto-refresh every 2 seconds for live updates
+                        time.sleep(2)
+                        st.rerun()
                     
                     else:
-                        st.warning("⚠️ Video processor not initialized. Please refresh the page.")
-                    
-                    # Instructions
-                    with st.expander("📖 Webcam Instructions", expanded=False):
-                        st.markdown("""
-                        **How to use Live Webcam Detection:**
-                        
-                        1. **Click 'START'** to begin webcam feed
-                        2. **Allow camera access** when your browser prompts
-                        3. **Position furniture** in view of the camera
-                        4. **Adjust settings** in real-time using the controls on the right
-                        5. **Click 'STOP'** to end the session
-                        
-                        **Tips for better detection:**
-                        - Ensure good lighting
-                        - Keep furniture clearly visible
-                        - Avoid excessive camera movement
-                        - Lower confidence threshold to detect more objects
-                        - Higher confidence threshold for more accurate detections
-                        
-                        **Troubleshooting:**
-                        - If camera doesn't start, check browser permissions
-                        - If detection is slow, try reducing the number of active classes
-                        - Refresh the page if video processor fails to initialize
-                        """)
-                    
-                    # Technical note
-                    st.info("""
-                    💡 **Technical Note:** This live detection uses WebRTC for real-time video streaming 
-                    and processing. Detection results are updated every 2 seconds while the camera is active.
-                    """)
+                        st.write("📹 Camera not active")
+                        st.write("*Click START above to begin detection*")
+                
+                # Settings panel
+                st.markdown("### ⚙️ Live Detection Settings")
+                
+                # Real-time confidence adjustment
+                new_confidence = st.slider(
+                    "Real-time Confidence Threshold",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=confidence_threshold,
+                    step=0.05,
+                    help="Adjust confidence threshold in real-time"
+                )
+                
+                # Update processor if confidence changed
+                if new_confidence != st.session_state.video_processor.confidence_threshold:
+                    st.session_state.video_processor.confidence_threshold = new_confidence
+                
+                # Real-time class filter
+                new_classes = st.multiselect(
+                    "Real-time Class Filter",
+                    options=FURNITURE_CLASSES,
+                    default=selected_classes,
+                    help="Adjust detected classes in real-time"
+                )
+                
+                # Update processor if classes changed
+                if set(new_classes) != set(st.session_state.video_processor.selected_classes):
+                    st.session_state.video_processor.selected_classes = new_classes
+                
+                # Performance info
+                with st.expander("📊 Performance Info"):
+                    st.write(f"**Model:** {webrtc_model_name}")
+                    st.write(f"**Confidence Threshold:** {new_confidence}")
+                    st.write(f"**Active Classes:** {len(new_classes)}")
+                    st.write("**Stream Status:** " + ("🟢 Active" if webrtc_ctx.state.playing else "🔴 Inactive"))
+            
+            else:
+                st.warning("⚠️ Video processor not initialized. Please refresh the page.")
+            
+            # Instructions
+            with st.expander("📖 Webcam Instructions", expanded=False):
+                st.markdown("""
+                **How to use Live Webcam Detection:**
+                
+                1. **Click 'START'** to begin webcam feed
+                2. **Allow camera access** when your browser prompts
+                3. **Position furniture** in view of the camera
+                4. **Adjust settings** in real-time using the controls on the right
+                5. **Click 'STOP'** to end the session
+                
+                **Tips for better detection:**
+                - Ensure good lighting
+                - Keep furniture clearly visible
+                - Avoid excessive camera movement
+                - Lower confidence threshold to detect more objects
+                - Higher confidence threshold for more accurate detections
+                
+                **Troubleshooting:**
+                - If camera doesn't start, check browser permissions
+                - If detection is slow, try reducing the number of active classes
+                - Refresh the page if video processor fails to initialize
+                """)
+            
+            # Technical note
+            st.info("""
+            💡 **Technical Note:** This live detection uses WebRTC for real-time video streaming 
+            and processing. Detection results are updated every 2 seconds while the camera is active.
+            """)
+            
         elif mode == "📂 Batch Processing":
             st.markdown('<h2 class="sub-header">📂 Batch Processing</h2>', unsafe_allow_html=True)
             
