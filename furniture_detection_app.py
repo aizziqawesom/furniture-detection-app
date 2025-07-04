@@ -15,6 +15,9 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from pathlib import Path
 import glob
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
+import av
+import threading
 
 # Page configuration
 st.set_page_config(
@@ -106,7 +109,94 @@ COLORS = [
     '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8C471',
     '#82E0AA', '#F1948A', '#85C1E9', '#F4D03F', '#AED6F1'
 ]
+# WebRTC Configuration
+RTC_CONFIGURATION = RTCConfiguration({
+    "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+})
 
+class VideoProcessor:
+    def __init__(self, model, confidence_threshold, selected_classes, model_name):
+        self.model = model
+        self.confidence_threshold = confidence_threshold
+        self.selected_classes = selected_classes
+        self.model_name = model_name
+        self.detection_results = []
+        self.lock = threading.Lock()
+    
+    def recv(self, frame):
+        img = frame.to_ndarray(format="bgr24")
+        
+        # Convert BGR to RGB for PIL
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(img_rgb)
+        
+        # Process with YOLO
+        results = self.model(pil_image)
+        
+        # Draw bounding boxes
+        processed_img, detections = self.draw_bounding_boxes_cv2(img, results)
+        
+        # Store detections (thread-safe)
+        with self.lock:
+            self.detection_results = detections
+        
+        return av.VideoFrame.from_ndarray(processed_img, format="bgr24")
+    
+    def draw_bounding_boxes_cv2(self, img, results):
+        """Draw bounding boxes using OpenCV (for real-time performance)"""
+        detections = []
+        
+        for result in results:
+            boxes = result.boxes
+            if boxes is not None:
+                for box in boxes:
+                    # Get box coordinates
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
+                    confidence = box.conf[0].cpu().numpy()
+                    class_id = int(box.cls[0].cpu().numpy())
+                    
+                    # Filter by confidence and selected classes
+                    if confidence >= self.confidence_threshold and FURNITURE_CLASSES[class_id] in self.selected_classes:
+                        # Get color for this class (convert hex to BGR)
+                        hex_color = COLORS[class_id % len(COLORS)]
+                        # Convert hex to BGR
+                        hex_color = hex_color.lstrip('#')
+                        rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+                        bgr_color = (rgb[2], rgb[1], rgb[0])  # Convert RGB to BGR
+                        
+                        # Draw bounding box
+                        cv2.rectangle(img, (x1, y1), (x2, y2), bgr_color, 3)
+                        
+                        # Prepare label
+                        label = f"{FURNITURE_CLASSES[class_id]}: {confidence:.2f}"
+                        
+                        # Get text size
+                        (text_width, text_height), baseline = cv2.getTextSize(
+                            label, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2
+                        )
+                        
+                        # Draw label background
+                        cv2.rectangle(img, (x1, y1 - text_height - 10), 
+                                    (x1 + text_width, y1), bgr_color, -1)
+                        
+                        # Draw text
+                        cv2.putText(img, label, (x1, y1 - 5), 
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                        
+                        # Store detection info
+                        detections.append({
+                            "class": FURNITURE_CLASSES[class_id],
+                            "confidence": float(confidence),
+                            "bbox": [float(x1), float(y1), float(x2), float(y2)],
+                            "model": self.model_name
+                        })
+        
+        return img, detections
+    
+    def get_latest_detections(self):
+        with self.lock:
+            return self.detection_results.copy()
+        
 # Model configurations
 MODEL_CONFIGS = {
     "YOLOv8s": {
