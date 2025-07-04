@@ -1683,39 +1683,20 @@ def main():
             
             webrtc_model = models[webrtc_model_name]
             
-            # Initialize video processor in session state (ALWAYS initialize before webrtc_streamer)
-            if 'video_processor' not in st.session_state:
-                st.session_state.video_processor = None
-                st.session_state.last_model = None
-            
-            # Create or update video processor if needed
-            if (st.session_state.video_processor is None or 
-                st.session_state.last_model != webrtc_model_name):
-                
-                st.session_state.video_processor = VideoProcessor(
-                    webrtc_model, confidence_threshold, selected_classes, webrtc_model_name
-                )
-                st.session_state.last_model = webrtc_model_name
+            # Create video processor directly (not in session state)
+            current_video_processor = VideoProcessor(
+                webrtc_model, confidence_threshold, selected_classes, webrtc_model_name
+            )
             
             # WebRTC streamer
             st.markdown("### 🎥 Live Camera Feed")
             st.info("📱 **Click 'START' to begin webcam detection. Allow camera access when prompted.**")
             
-            # Create a safe video processor factory function
-            def create_video_processor():
-                if st.session_state.video_processor is not None:
-                    return st.session_state.video_processor
-                else:
-                    # Fallback: create a new one if session state is corrupted
-                    return VideoProcessor(
-                        webrtc_model, confidence_threshold, selected_classes, webrtc_model_name
-                    )
-            
             webrtc_ctx = webrtc_streamer(
                 key="furniture-detection",
                 mode=WebRtcMode.SENDRECV,
                 rtc_configuration=RTC_CONFIGURATION,
-                video_processor_factory=create_video_processor,
+                video_processor_factory=lambda: current_video_processor,
                 media_stream_constraints={"video": True, "audio": False},
                 async_processing=True,
             )
@@ -1730,8 +1711,8 @@ def main():
                     
                     # Update detection display periodically
                     if webrtc_ctx.state.playing:
-                        # Get latest detections
-                        latest_detections = st.session_state.video_processor.get_latest_detections()
+                        # Get latest detections from the current processor
+                        latest_detections = current_video_processor.get_latest_detections()
                         
                         with detection_placeholder.container():
                             if latest_detections:
@@ -1789,8 +1770,8 @@ def main():
                 )
                 
                 # Update processor if confidence changed
-                if new_confidence != st.session_state.video_processor.confidence_threshold:
-                    st.session_state.video_processor.confidence_threshold = new_confidence
+                if new_confidence != current_video_processor.confidence_threshold:
+                    current_video_processor.confidence_threshold = new_confidence
                 
                 # Real-time class filter
                 new_classes = st.multiselect(
@@ -1801,8 +1782,8 @@ def main():
                 )
                 
                 # Update processor if classes changed
-                if set(new_classes) != set(st.session_state.video_processor.selected_classes):
-                    st.session_state.video_processor.selected_classes = new_classes
+                if set(new_classes) != set(current_video_processor.selected_classes):
+                    current_video_processor.selected_classes = new_classes
                 
                 # Performance info
                 with st.expander("📊 Performance Info"):
@@ -1843,7 +1824,7 @@ def main():
             💡 **Technical Note:** This live detection uses WebRTC for real-time video streaming 
             and processing. Detection results are updated every 2 seconds while the camera is active.
             """)
-            
+
         elif mode == "📂 Batch Processing":
             st.markdown('<h2 class="sub-header">📂 Batch Processing</h2>', unsafe_allow_html=True)
             
