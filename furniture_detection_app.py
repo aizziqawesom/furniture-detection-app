@@ -1578,87 +1578,121 @@ def main():
                 os.unlink(video_path)
         
         elif mode == "📹 Webcam (Live)":
-            st.markdown('<h2 class="sub-header">📹 Live Webcam Detection</h2>', unsafe_allow_html=True)
-            
-            # Webcam settings
-            webcam_source = st.selectbox("Camera Source", [0, 1, 2], help="Select camera index")
-            
-            # Model selection for webcam
-            if compare_mode:
-                st.info("ℹ️ Live comparison mode will alternate between models")
-                frame_interval = st.slider("Model Switch Interval (frames)", 1, 30, 10)
-            
-            if st.button("🎥 Start Webcam"):
-                # Create placeholder for webcam feed
-                frame_placeholder = st.empty()
-                stop_button = st.button("⏹️ Stop Webcam")
-                
-                # Initialize webcam
-                cap = cv2.VideoCapture(webcam_source)
-                
-                if not cap.isOpened():
-                    st.error("❌ Could not open webcam")
-                else:
-                    st.success("✅ Webcam started successfully!")
+                    st.markdown('<h2 class="sub-header">📹 Live Webcam Detection</h2>', unsafe_allow_html=True)
                     
-                    with col2:
-                        detection_placeholder = st.empty()
+                    # Initialize session state for webcam
+                    if 'webcam_running' not in st.session_state:
+                        st.session_state.webcam_running = False
+                    if 'webcam_cap' not in st.session_state:
+                        st.session_state.webcam_cap = None
                     
-                    frame_count = 0
-                    current_model_idx = 0
-                    model_names = list(models.keys())
+                    # Webcam settings
+                    webcam_source = st.selectbox("Camera Source", [0, 1, 2], help="Select camera index")
                     
-                    while not stop_button:
-                        ret, frame = cap.read()
-                        if not ret:
-                            st.error("❌ Failed to read from webcam")
-                            break
-                        
-                        # Convert frame for processing
-                        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        pil_image = Image.fromarray(frame_rgb)
-                        
-                        # Select model for processing
-                        if compare_mode:
-                            if frame_count % frame_interval == 0:
-                                current_model_idx = (current_model_idx + 1) % len(model_names)
-                            current_model_name = model_names[current_model_idx]
-                        else:
-                            current_model_name = selected_model
-                        
-                        current_model = models[current_model_name]
-                        
-                        # Process frame
-                        processed_img, detections, inf_time = process_image(
-                            pil_image, current_model, confidence_threshold, selected_classes, current_model_name
-                        )
-                        
-                        # Display frame
-                        frame_placeholder.image(
-                            processed_img, 
-                            caption=f"Live Feed - {MODEL_CONFIGS[current_model_name]['icon']} {current_model_name} ({inf_time:.3f}s)", 
-                            use_column_width=True
-                        )
-                        
-                        # Update detection info
-                        with detection_placeholder.container():
-                            st.markdown(f"### 🔴 Live Detections - {current_model_name}")
-                            if detections:
-                                for det in detections:
-                                    confidence_color = "green" if det['confidence'] > 0.8 else "orange" if det['confidence'] > 0.6 else "red"
-                                    st.markdown(
-                                        f'<span class="confidence-box" style="background-color: {confidence_color};">'
-                                        f'{det["class"]}: {det["confidence"]:.2f}</span>',
-                                        unsafe_allow_html=True
-                                    )
+                    # Model selection for webcam
+                    if compare_mode:
+                        st.info("ℹ️ Live comparison mode will alternate between models")
+                        frame_interval = st.slider("Model Switch Interval (frames)", 1, 30, 10)
+                    else:
+                        frame_interval = 1
+                    
+                    # Control buttons
+                    col_start, col_stop = st.columns(2)
+                    
+                    with col_start:
+                        if st.button("🎥 Start Webcam", disabled=st.session_state.webcam_running):
+                            st.session_state.webcam_running = True
+                            st.session_state.webcam_cap = cv2.VideoCapture(webcam_source)
+                            if not st.session_state.webcam_cap.isOpened():
+                                st.error("❌ Could not open webcam")
+                                st.session_state.webcam_running = False
+                                st.session_state.webcam_cap = None
                             else:
-                                st.write("No detections")
-                        
-                        frame_count += 1
-                        time.sleep(0.1)  # Small delay to prevent overwhelming
+                                st.success("✅ Webcam started successfully!")
+                                st.rerun()
                     
-                    cap.release()
-        
+                    with col_stop:
+                        if st.button("⏹️ Stop Webcam", disabled=not st.session_state.webcam_running):
+                            st.session_state.webcam_running = False
+                            if st.session_state.webcam_cap is not None:
+                                st.session_state.webcam_cap.release()
+                                st.session_state.webcam_cap = None
+                            st.success("✅ Webcam stopped!")
+                            st.rerun()
+                    
+                    # Webcam feed
+                    if st.session_state.webcam_running and st.session_state.webcam_cap is not None:
+                        # Create placeholders
+                        frame_placeholder = st.empty()
+                        
+                        with col2:
+                            detection_placeholder = st.empty()
+                        
+                        # Initialize frame counter if not exists
+                        if 'frame_count' not in st.session_state:
+                            st.session_state.frame_count = 0
+                        if 'current_model_idx' not in st.session_state:
+                            st.session_state.current_model_idx = 0
+                        
+                        model_names = list(models.keys())
+                        
+                        # Read frame
+                        ret, frame = st.session_state.webcam_cap.read()
+                        
+                        if ret:
+                            # Convert frame for processing
+                            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                            pil_image = Image.fromarray(frame_rgb)
+                            
+                            # Select model for processing
+                            if compare_mode:
+                                if st.session_state.frame_count % frame_interval == 0:
+                                    st.session_state.current_model_idx = (st.session_state.current_model_idx + 1) % len(model_names)
+                                current_model_name = model_names[st.session_state.current_model_idx]
+                            else:
+                                current_model_name = selected_model
+                            
+                            current_model = models[current_model_name]
+                            
+                            # Process frame
+                            processed_img, detections, inf_time = process_image(
+                                pil_image, current_model, confidence_threshold, selected_classes, current_model_name
+                            )
+                            
+                            # Display frame
+                            frame_placeholder.image(
+                                processed_img, 
+                                caption=f"Live Feed - {MODEL_CONFIGS[current_model_name]['icon']} {current_model_name} ({inf_time:.3f}s)", 
+                                use_column_width=True
+                            )
+                            
+                            # Update detection info
+                            with detection_placeholder.container():
+                                st.markdown(f"### 🔴 Live Detections - {current_model_name}")
+                                if detections:
+                                    for det in detections:
+                                        confidence_color = "green" if det['confidence'] > 0.8 else "orange" if det['confidence'] > 0.6 else "red"
+                                        st.markdown(
+                                            f'<span class="confidence-box" style="background-color: {confidence_color};">'
+                                            f'{det["class"]}: {det["confidence"]:.2f}</span>',
+                                            unsafe_allow_html=True
+                                        )
+                                else:
+                                    st.write("No detections")
+                            
+                            st.session_state.frame_count += 1
+                            
+                            # Auto-refresh for continuous feed
+                            time.sleep(0.1)
+                            st.rerun()
+                        
+                        else:
+                            st.error("❌ Failed to read from webcam")
+                            st.session_state.webcam_running = False
+                            if st.session_state.webcam_cap is not None:
+                                st.session_state.webcam_cap.release()
+                                st.session_state.webcam_cap = None
+                                
         elif mode == "📂 Batch Processing":
             st.markdown('<h2 class="sub-header">📂 Batch Processing</h2>', unsafe_allow_html=True)
             
