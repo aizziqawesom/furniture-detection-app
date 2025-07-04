@@ -1586,8 +1586,39 @@ def main():
                     if 'webcam_cap' not in st.session_state:
                         st.session_state.webcam_cap = None
                     
+                    # Auto-detect available cameras
+                    def detect_cameras():
+                        available_cameras = []
+                        for i in range(10):  # Check first 10 indices
+                            cap = cv2.VideoCapture(i)
+                            if cap.isOpened():
+                                available_cameras.append(i)
+                                cap.release()
+                        return available_cameras
+                    
+                    # Get available cameras
+                    if 'available_cameras' not in st.session_state:
+                        with st.spinner("🔍 Detecting available cameras..."):
+                            st.session_state.available_cameras = detect_cameras()
+                    
+                    available_cameras = st.session_state.available_cameras
+                    
+                    if not available_cameras:
+                        st.error("❌ No cameras detected! Please check your camera connection.")
+                        st.info("💡 Try refreshing the page or connecting a camera.")
+                        if st.button("🔄 Refresh Camera Detection"):
+                            del st.session_state.available_cameras
+                            st.rerun()
+                        return
+                    
+                    st.success(f"✅ Found {len(available_cameras)} camera(s): {available_cameras}")
+                    
                     # Webcam settings
-                    webcam_source = st.selectbox("Camera Source", [0, 1, 2], help="Select camera index")
+                    webcam_source = st.selectbox(
+                        "Camera Source", 
+                        available_cameras, 
+                        help=f"Select from available cameras: {available_cameras}"
+                    )
                     
                     # Model selection for webcam
                     if compare_mode:
@@ -1601,15 +1632,25 @@ def main():
                     
                     with col_start:
                         if st.button("🎥 Start Webcam", disabled=st.session_state.webcam_running):
-                            st.session_state.webcam_running = True
-                            st.session_state.webcam_cap = cv2.VideoCapture(webcam_source)
-                            if not st.session_state.webcam_cap.isOpened():
-                                st.error("❌ Could not open webcam")
-                                st.session_state.webcam_running = False
-                                st.session_state.webcam_cap = None
-                            else:
+                            try:
+                                st.session_state.webcam_cap = cv2.VideoCapture(webcam_source)
+                                
+                                # Test if camera actually works
+                                ret, test_frame = st.session_state.webcam_cap.read()
+                                if not ret or test_frame is None:
+                                    raise Exception("Camera opened but cannot read frames")
+                                
+                                st.session_state.webcam_running = True
                                 st.success("✅ Webcam started successfully!")
                                 st.rerun()
+                                
+                            except Exception as e:
+                                st.error(f"❌ Could not start webcam {webcam_source}: {str(e)}")
+                                st.info("💡 Try selecting a different camera or check camera permissions.")
+                                if st.session_state.webcam_cap is not None:
+                                    st.session_state.webcam_cap.release()
+                                    st.session_state.webcam_cap = None
+                                st.session_state.webcam_running = False
                     
                     with col_stop:
                         if st.button("⏹️ Stop Webcam", disabled=not st.session_state.webcam_running):
