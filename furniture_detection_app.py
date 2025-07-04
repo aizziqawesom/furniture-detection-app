@@ -1749,7 +1749,7 @@ def main():
                                 st.write("*Try adjusting the confidence threshold or ensure furniture is visible*")
                         
                         # Auto-refresh every 2 seconds for live updates
-                        time.sleep(2)
+                        time.sleep(0.2)
                         st.rerun()
                     
                     else:
