@@ -1823,7 +1823,7 @@ def main():
             # Technical note
             st.info(f"""
             💡 **Technical Note:** This live detection uses WebRTC for real-time video streaming 
-            and processing. Detection results are updated every {xtime} seconds while the camera is active.
+            and processing. Detection results are updated every {xtime:.1f} seconds while the camera is active.
             """)
 
         elif mode == "📂 Batch Processing":
