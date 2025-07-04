@@ -1749,8 +1749,8 @@ def main():
                                 st.write("*Try adjusting the confidence threshold or ensure furniture is visible*")
                         
                         # Auto-refresh every 2 seconds for live updates
-                        x = 0.02
-                        time.sleep(x)
+                        xtime = 0.02
+                        time.sleep(xtime)
                         st.rerun()
                     
                     else:
@@ -1821,9 +1821,9 @@ def main():
                 """)
             
             # Technical note
-            st.info("""
+            st.info(f"""
             💡 **Technical Note:** This live detection uses WebRTC for real-time video streaming 
-            and processing. Detection results are updated every {x} seconds while the camera is active.
+            and processing. Detection results are updated every {xtime} seconds while the camera is active.
             """)
 
         elif mode == "📂 Batch Processing":
