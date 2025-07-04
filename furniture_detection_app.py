@@ -1669,7 +1669,7 @@ def main():
         
         elif mode == "📹 Webcam (Live)":
             st.markdown('<h2 class="sub-header">📹 Live Webcam Detection</h2>', unsafe_allow_html=True)
-            xtime = 0.02
+            xtime = 0.1
             # Model selection for webcam
             if compare_mode:
                 st.warning("⚠️ Live comparison mode not supported in WebRTC mode. Please select a single model.")
